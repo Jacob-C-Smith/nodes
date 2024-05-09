@@ -1,157 +1,250 @@
 
-var requestAnimFrame = (function () {
-    return window.requestAnimationFrame ||
-        window.webkitRequestAnimationFrame ||
-        window.mozRequestAnimationFrame ||
-        window.oRequestAnimationFrame ||
-        window.msRequestAnimationFrame ||
-        function (callback) {
-            window.setTimeout(callback, 1000 / 60);
-        };
-})();
-
-function resize_canvas() {
-    var canvas = document.getElementById("canvas");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-
-var canvas = document.getElementById("canvas");
-var c = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-var radius = 32;
-var lineWidth = 4;
-var gravity = 0.1;
-var dampening = 0.995;
-var mousePullStrength = 0.005;
+// Global
+let c = null;
 var animate = false;
-
-var mouse = {
+let mouse = {
     x: 0,
     y: 0,
     down: false
 };
-
-var circle = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    vx: 0, // 'v' stands for 'velocity'
-    vy: 0
-};
-var mat22node = {
+let mat22node = {
     x: 100,
     y: 100,
     name: null,
     in: [],
     out: []
 };
-
-function executeFrame() {
-    if (animate)
-        requestAnimFrame(executeFrame);
-    //incrementSimulation();
-    c.clearRect(0, 0, canvas.width, canvas.height);
-    drawBox();
-    drawNode(mat22node);
-    
-}
-
-function incrementSimulation() {
-    // Pull the circle toward the mouse
-    if (mouse.down) {
-
+let draw_frame = (
+    function () {
+        return function (callback) {
+            window.setTimeout(callback, 1000 / 60);
+        };
     }
+)();
+
+/** !
+ * Resize the canvas to fit the browser window
+ * 
+ * @param void
+ * 
+ * @return void
+ */
+function resize_canvas ( ) {
+
+    // Initialized data
+    let canvas = document.getElementById("canvas");
+
+    // Update the width
+    canvas.width = window.innerWidth;
+
+    // Update the height
+    canvas.height = window.innerHeight;
+
+    // Store the context
+    c = canvas.getContext("2d");
+
+    // Done
+    return;
 }
 
-function drawBox() {
-    c.lineWidth = 1;
-    c.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-}
+/** !
+ * Initialize the graph editor
+ * 
+ * @param void
+ * 
+ * @return void
+ */
+function init ( ) {
 
-function drawCircle() {
-    c.beginPath();
-    c.arc(circle.x, circle.y, radius - lineWidth / 2, 0, 2 * Math.PI, false);
-    c.fillStyle = '00F0FF';
-    c.fill();
-    c.lineWidth = 4;
-    c.strokeStyle = 'black';
-    c.stroke();
-}
-
-function drawLineToMouse() {
-    c.lineWidth = 2;
-    c.moveTo(circle.x, circle.y);
-    c.lineTo(mouse.x, mouse.y);
-    c.stroke();
-}
-
-canvas.addEventListener('mousedown', function (e) {
-    mouse.down = true;
-    mouse.x = e.pageX;
-    mouse.y = e.pageY;
-});
-
-canvas.addEventListener('mousemove', function (e) {
-    mouse.x = e.pageX;
-    mouse.y = e.pageY;
-});
-
-canvas.addEventListener('mouseup', function (e) {
-    mouse.down = false;
-});
-
-// Start animating when the mouse enters the canvas
-canvas.addEventListener('mouseover', function (e) {
-    animate = true;
-    executeFrame();
-});
-
-// Stop animating when the mouse exits the canvas
-canvas.addEventListener('mouseout', function (e) {
-    mouse.down = false;
-    animate = false;
-});
-
-canvas.addEventListener('dragover', (e) => {
-    e.preventDefault()
-});
-canvas.addEventListener('drop', (e) => {
-    e.dataTransfer.files[0].text().then(s => {
-        node_add(JSON.parse(s));
+    // Mouse down
+    canvas.addEventListener('mousedown', function (e) {
+        mouse.down = true;
+        mouse.x = e.pageX;
+        mouse.y = e.pageY;
     });
-    e.preventDefault();
-});
+    
+    // Mouse move
+    canvas.addEventListener('mousemove', function (e) {
 
-function node_add(node_json) {
-    mat22node.name = node_json.name;
-    for (let i = 0; i < node_json.input.length; i++) {
-        const element = node_json.input[i];
-        mat22node.in[i] = node_json.input[i].name;
-    }
+        // Update mouse X
+        mouse.x = e.pageX;
 
-    for (let i = 0; i < node_json.output.length; i++) {
-        const element = node_json.output[i];
-        mat22node.out[i] = node_json.output[i].name;
-    }
+        // Update mouse Y
+        mouse.y = e.pageY;
+    });
+    
+    // Mouse up
+    canvas.addEventListener('mouseup', function (e) {
 
-    console.log(mat22node);
+        // Clear the mouse flag
+        mouse.down = false;
+    });
+    
+    // Hover
+    canvas.addEventListener('mouseover', function (e) {
+
+        // Set the animate flag
+        animate = true;
+
+        // Draw the canvas
+        draw();
+    });
+    
+    // Exit 
+    canvas.addEventListener('mouseout', function (e) {
+        
+        // Clear the mouse flag
+        mouse.down = false;
+
+        // Clear the animate flag
+        animate = false;
+    });
+    
+    // Drag 
+    canvas.addEventListener('dragover', (e) => {
+        
+        // Do nothing
+        e.preventDefault()
+    });
+    
+    // Drop
+    canvas.addEventListener('drop', (e) => {
+        
+        // Get the text of the file
+        e.dataTransfer.files[0].text()
+
+        // TODO: Document a bit better
+        .then(s => {
+            node_add(JSON.parse(s));
+        });
+
+        // Nothing else
+        e.preventDefault();
+    });
+
+    // Done
+    return;
 }
 
-function drawNode(node) {
-    let name_width_px = c.measureText(node.name).width;
-    let name_height_px = c.measureText(node.name);
-    let name_position = [ node.x + 8, node.y ];
-    let separator_position = [ node.x, node.y + 8 ];
-    let max_xputs = (node.in.length > node.out.length) ? node.in.length : node.out.length;
-    let node_bounds = [ node.x, node.y - 24 - 4, name_width_px + 16, 36 + (max_xputs * 32) ];
+/** !
+ * Draw the canvas
+ * 
+ * @param void
+ * 
+ * @return void
+ */
+function draw ( ) {
 
+    // State check
+    if ( animate ) draw_frame(draw);
 
-    // Compute the height of the node border
+    // Process input
+    process_input();
+
+    // Draw
     {
-        
+        // Clear the screen
+        c.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw the border
+        draw_border();
+
+        // Draw a node
+        draw_node(mat22node);
+
+        // TODO: Draw each node
+        //
+
+        // TODO: Draw each connection
+        //
     }
 
+    // Done
+    return;
+}
+
+/** !
+ * Process input
+ * 
+ * @param void
+ * 
+ * @return void
+ */
+function process_input ( ) {
+    
+    // TODO: Process input
+    //
+
+    if ( mouse.down ) {
+        // ...
+    }
+
+    // Done
+    return;
+}
+
+/** !
+ * Draw the border
+ * 
+ * @param void
+ * 
+ * @return void
+ */
+function draw_border ( ) {
+
+    // 2 px border
+    c.lineWidth = 2;
+
+    // Draw the border
+    c.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+
+    // Done
+    return;
+}
+
+/** !
+ * Add a node to the graph
+ * 
+ * @param node_json the json of the node
+ * 
+ * @return void
+ */
+function node_add ( node_json ) {
+
+    // Store the name of the node
+    mat22node.name = node_json.name;
+
+    // Store each input property
+    for (let i = 0; i < node_json.input.length; i++) 
+        mat22node.in[i] = node_json.input[i].name;
+
+    // Store each output property
+    for (let i = 0; i < node_json.output.length; i++) 
+        mat22node.out[i] = node_json.output[i].name;
+
+    // Print the node to standard out
+    console.log(mat22node);
+
+    // Done
+    return;
+}
+
+/** !
+ * Draw a node on the graph
+ * 
+ * @param node the node object
+ * 
+ * @return void
+ */
+function draw_node ( node ) {
+
+    // Initialized data
+    let name_width_px      = c.measureText(node.name).width;
+    let name_height_px     = c.measureText(node.name);
+    let name_position      = [ node.x + 8, node.y ];
+    let separator_position = [ node.x, node.y + 8 ];
+    let max_xputs          = (node.in.length > node.out.length) ? node.in.length : node.out.length;
+    let node_bounds        = [ node.x, node.y - 24 - 4, name_width_px + 16, 36 + (max_xputs * 32) ];
 
     // Draw the node
     {
@@ -172,9 +265,16 @@ function drawNode(node) {
         // Draw the node border
         c.strokeRect(node_bounds[0],node_bounds[1],node_bounds[2],node_bounds[3]);
     }
+
+    // Done
+    return;
 }
 
+// Initialize the node editor
+init();
 
-// Draw the initial scene once, so something
-// is displayed before animation starts.
-executeFrame();
+// Resize the canvas
+resize_canvas();
+
+// Draw 
+draw();
